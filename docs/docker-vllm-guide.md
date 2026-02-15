@@ -32,7 +32,7 @@ docker run -d --gpus all --name vibevoice-vllm \
   -v /mnt/NAS_1:/NAS_1 \
   -v ~/.cache/huggingface:/root/.cache/huggingface \
   --entrypoint bash \
-  vllm/vllm-openai:latest \
+  vllm/vllm-openai:v0.14.1 \
   -c "python3 /app/vllm_plugin/scripts/start_server.py"
 ```
 
@@ -108,3 +108,35 @@ docker rm vibevoice-vllm
 **Server won't start:**
 - Check logs: `docker logs vibevoice-vllm`
 - Ensure no other process is using port 8000 or the GPU
+
+## vLLM Version Compatibility
+
+The vLLM plugin uses internal vLLM APIs (`multimodal.profiling`, `multimodal.processing`, etc.) that change across releases. The plugin was written against vLLM ~v0.14.x (Jan 2026).
+
+**Recommended:** `v0.14.1`
+
+**Known issues with other versions:**
+
+| Version | Status | Issue |
+|---------|--------|-------|
+| `v0.14.1` | Recommended | Compatible with the plugin |
+| `v0.15.0` | May work | Try if v0.14.1 has issues |
+| `v0.15.1` / `latest` | Broken | `AudioMediaIO` removed, `multimodal.profiling` moved |
+
+If you hit import errors like `ModuleNotFoundError: No module named 'vllm.multimodal.profiling'`, pin to an older version:
+
+```bash
+docker rm -f vibevoice-vllm 2>/dev/null
+
+docker run -d --gpus all --name vibevoice-vllm \
+  --ipc=host \
+  -p 8000:8000 \
+  -e VIBEVOICE_FFMPEG_MAX_CONCURRENCY=64 \
+  -e PYTORCH_ALLOC_CONF=expandable_segments:True \
+  -v $(pwd):/app \
+  -v /mnt/NAS_1:/NAS_1 \
+  -v ~/.cache/huggingface:/root/.cache/huggingface \
+  --entrypoint bash \
+  vllm/vllm-openai:v0.14.1 \
+  -c "python3 /app/vllm_plugin/scripts/start_server.py"
+```
