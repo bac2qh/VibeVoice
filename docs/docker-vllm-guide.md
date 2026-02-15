@@ -1,15 +1,15 @@
 # VibeVoice ASR: Docker Guide (vLLM)
 
-Run VibeVoice ASR via vLLM for memory-efficient, high-throughput inference. Uses PagedAttention to fit the 7B model on GPUs with 16GB VRAM.
+Run VibeVoice ASR via vLLM for memory-efficient, high-throughput inference. Uses PagedAttention for dynamic GPU memory management.
 
-Tested on RTX 4080 (16GB VRAM).
+**Note:** The 7B model in bf16 requires ~14GB for weights alone. On 16GB GPUs (e.g. RTX 4080), this leaves very little room for KV cache. A GPU with >= 24GB VRAM (e.g. RTX 3090/4090) is recommended. See the [16GB GPU section](#16gb-gpu-low-memory-setup) for constrained setups.
 
 ## Prerequisites
 
 - Ubuntu with NVIDIA GPU drivers installed
 - Docker with [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)
 - NAS mounted at `/mnt/NAS_1/`
-- GPU with >= 16GB VRAM
+- GPU with >= 24GB VRAM recommended (16GB possible with constraints)
 
 ## Quick Start
 
@@ -95,11 +95,54 @@ docker rm vibevoice-vllm
 | `VIBEVOICE_FFMPEG_MAX_CONCURRENCY` | Max FFmpeg processes for audio decoding | `64` |
 | `PYTORCH_ALLOC_CONF` | PyTorch memory allocator config | `expandable_segments:True` |
 
+## 16GB GPU (Low-Memory Setup)
+
+The default `start_server.py` uses `--max-model-len 65536` and `--max-num-seqs 64`, which requires far more VRAM than 16GB. To run on a 16GB GPU (e.g. RTX 4080), bypass the default script and launch vLLM directly with constrained settings:
+
+```bash
+docker rm -f vibevoice-vllm 2>/dev/null
+
+docker run -d --gpus all --name vibevoice-vllm \
+  --ipc=host \
+  -p 8000:8000 \
+  -e VIBEVOICE_FFMPEG_MAX_CONCURRENCY=64 \
+  -e PYTORCH_ALLOC_CONF=expandable_segments:True \
+  -v $(pwd):/app \
+  -v /mnt/NAS_1:/NAS_1 \
+  -v ~/.cache/huggingface:/root/.cache/huggingface \
+  --entrypoint bash \
+  vllm/vllm-openai:v0.14.1 \
+  -c "pip install -e /app && vllm serve microsoft/VibeVoice-ASR \
+    --served-model-name vibevoice \
+    --trust-remote-code \
+    --dtype bfloat16 \
+    --max-num-seqs 1 \
+    --max-model-len 4096 \
+    --gpu-memory-utilization 0.95 \
+    --no-enable-prefix-caching \
+    --enable-chunked-prefill \
+    --enforce-eager \
+    --chat-template-content-format openai \
+    --tensor-parallel-size 1 \
+    --allowed-local-media-path /app \
+    --allowed-local-media-path /NAS_1 \
+    --port 8000"
+```
+
+Key differences from default:
+- `--max-model-len 4096` (down from 65536) — limits KV cache memory
+- `--max-num-seqs 1` (down from 64) — one request at a time
+- `--gpu-memory-utilization 0.95` (up from 0.8) — use nearly all VRAM
+- `--enforce-eager` — skips CUDA graph compilation to save memory
+
+**Limitations:** Short context window (4096 tokens) limits transcription length. For long audio, a 24GB+ GPU is needed.
+
 ## Troubleshooting
 
-**CUDA out of memory:**
-- Reduce GPU memory utilization: add `-e VLLM_GPU_MEMORY_UTILIZATION=0.85` to docker run
-- Reduce max sequences: add `-e VLLM_MAX_NUM_SEQS=1` to docker run
+**CUDA out of memory / model fails to load:**
+- If using default `start_server.py`: switch to the [16GB GPU setup](#16gb-gpu-low-memory-setup)
+- Lower `--max-model-len` further (e.g. 2048)
+- Ensure no other processes are using the GPU: `nvidia-smi`
 
 **Audio decoding failed:**
 - Ensure audio file is inside a mounted directory (`/NAS_1` or `/app`)
