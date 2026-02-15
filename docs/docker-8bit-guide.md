@@ -1,12 +1,26 @@
 # VibeVoice ASR: Docker Guide with 8-bit Quantization
 
-Run VibeVoice ASR inference with 8-bit quantization on Ubuntu with NVIDIA GPUs (tested on RTX 4080 16GB).
+Run VibeVoice ASR inference with 8-bit quantization on Ubuntu with NVIDIA GPUs. 8-bit quantization reduces the model from ~14GB to ~7GB VRAM, making it fit comfortably on 16GB GPUs like the RTX 4080.
+
+**This is the recommended approach for 16GB GPUs.** bf16 (14GB) is too tight, and vLLM bf16 also OOMs due to KV cache overhead.
 
 ## Prerequisites
 
 - Ubuntu with NVIDIA GPU drivers installed
 - Docker with [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)
 - NAS mounted at `/mnt/NAS_1/`
+- GPU with >= 16GB VRAM
+
+## Container Version
+
+bitsandbytes requires a container with CUDA <= 13.0 (pre-compiled binaries not available for newer CUDA).
+
+| Container | CUDA | bitsandbytes |
+|-----------|------|-------------|
+| `25.09` | 13.0 | Works (recommended) |
+| `25.06` | 12.9 | Works |
+| `25.03` | 12.8 | Works |
+| `25.12` | 13.1 | Broken (no pre-compiled binary) |
 
 ## Quick Start
 
@@ -18,7 +32,7 @@ sudo docker run --privileged --net=host --ipc=host \
   --gpus all --rm -it \
   -v /mnt/NAS_1:/NAS_1 \
   -v ~/.cache/huggingface:/root/.cache/huggingface \
-  nvcr.io/nvidia/pytorch:24.12-py3
+  nvcr.io/nvidia/pytorch:25.09-py3
 ```
 
 Volume mounts:
@@ -99,8 +113,8 @@ Alice, Bob, machine learning, OpenAI
 
 | Mode | VRAM (approx) | Fits on 4080 (16GB) |
 |------|---------------|---------------------|
-| bfloat16 (default) | ~14 GB | Tight |
-| 8-bit quantized | ~7 GB | Yes |
+| bfloat16 (default) | ~14 GB | No (OOM with any overhead) |
+| 8-bit quantized | ~7 GB | Yes (recommended) |
 
 ## CLI Reference
 
