@@ -44,6 +44,7 @@ Volume mounts:
 ### 2. Install VibeVoice (inside the container)
 
 ```bash
+apt update && apt install ffmpeg -y
 git clone https://github.com/bac2qh/VibeVoice.git
 cd VibeVoice
 pip install -e .
