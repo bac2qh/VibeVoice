@@ -18,7 +18,7 @@ sudo docker run --privileged --net=host --ipc=host \
   --gpus all --rm -it \
   -v /mnt/NAS_1:/NAS_1 \
   -v ~/.cache/huggingface:/root/.cache/huggingface \
-  nvcr.io/nvidia/pytorch:25.12-py3
+  nvcr.io/nvidia/pytorch:24.12-py3
 ```
 
 Volume mounts:
