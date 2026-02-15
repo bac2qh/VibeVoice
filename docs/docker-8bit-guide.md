@@ -22,14 +22,16 @@ bitsandbytes requires a container with CUDA <= 13.0 (pre-compiled binaries not a
 | `25.03` | 12.8 | Works |
 | `25.12` | 13.1 | Broken (no pre-compiled binary) |
 
-## Quick Start
+## First-Time Setup
 
-### 1. Launch Docker Container
+### 1. Create a Persistent Docker Container
+
+Use `--name` without `--rm` so the container survives reboots:
 
 ```bash
 sudo docker run --privileged --net=host --ipc=host \
   --ulimit memlock=-1:-1 --ulimit stack=-1:-1 \
-  --gpus all --rm -it \
+  --gpus all -it --name vibevoice \
   -v /mnt/NAS_1:/NAS_1 \
   -v ~/.cache/huggingface:/root/.cache/huggingface \
   nvcr.io/nvidia/pytorch:25.09-py3
@@ -39,7 +41,7 @@ Volume mounts:
 - `/mnt/NAS_1` → `/NAS_1` inside the container (audio files)
 - `~/.cache/huggingface` → persists downloaded models across container restarts
 
-### 2. Install VibeVoice
+### 2. Install VibeVoice (inside the container)
 
 ```bash
 git clone https://github.com/bac2qh/VibeVoice.git
@@ -50,7 +52,30 @@ pip install bitsandbytes flash-attn --no-build-isolation
 
 ### 3. Run Inference
 
-**Single file:**
+```bash
+cd /root/VibeVoice
+python demo/vibevoice_asr_inference_with_context.py \
+  --model_path microsoft/VibeVoice-ASR \
+  --audio /NAS_1/audio/recording.mp3 \
+  --load_in_8bit \
+  --attn_implementation flash_attention_2 \
+  --output /NAS_1/results/output.json
+```
+
+The model downloads on first run and is cached on the host at `~/.cache/huggingface`.
+
+## After Reboot
+
+The container persists across reboots. Restart and reattach:
+
+```bash
+sudo docker start vibevoice
+sudo docker exec -it vibevoice bash
+cd /root/VibeVoice
+```
+
+Then run inference as usual:
+
 ```bash
 python demo/vibevoice_asr_inference_with_context.py \
   --model_path microsoft/VibeVoice-ASR \
@@ -59,6 +84,20 @@ python demo/vibevoice_asr_inference_with_context.py \
   --attn_implementation flash_attention_2 \
   --output /NAS_1/results/output.json
 ```
+
+All pip packages and cloned repos inside the container are preserved — no reinstall needed.
+
+## Updating VibeVoice
+
+To pull the latest code inside the container:
+
+```bash
+cd /root/VibeVoice
+git pull
+pip install -e .
+```
+
+## Inference Examples
 
 **Single file with hotwords:**
 ```bash
@@ -94,7 +133,7 @@ python demo/vibevoice_asr_inference_with_context.py \
 
 ## Hotwords File Format
 
-Create a text file with one term per line:
+One term per line:
 
 ```
 Alice
