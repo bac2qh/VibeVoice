@@ -1,0 +1,24 @@
+#!/bin/bash
+# Configuration file for transcribe-remote.sh
+# Copy this file to transcribe-remote.conf and fill in your values
+
+# Inference machine settings
+INFERENCE_MAC="aa:bb:cc:dd:ee:ff"     # MAC address for Wake-on-LAN
+INFERENCE_HOST="192.168.1.100"         # IP address or hostname
+SSH_USER="your-username"               # SSH username on inference machine
+
+# Docker settings
+DOCKER_CONTAINER="vibevoice"           # Name of the Docker container
+DOCKER_WORKDIR="/root/VibeVoice"       # Working directory inside container
+
+# NAS paths (as seen inside Docker container)
+NAS_MOUNT_DOCKER="/NAS_1"              # NAS mount point inside Docker
+
+# Model defaults
+DEFAULT_MODEL="microsoft/VibeVoice-ASR"
+DEFAULT_ATTN="flash_attention_2"
+DEFAULT_POST_ACTION="suspend"          # suspend | shutdown | none
+
+# Timeouts (seconds)
+SSH_WAIT_TIMEOUT=300                   # Maximum time to wait for SSH
+SSH_POLL_INTERVAL=5                    # Interval between SSH connection attempts
