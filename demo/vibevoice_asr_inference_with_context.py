@@ -17,6 +17,7 @@ import json
 import time
 from pathlib import Path
 from typing import List, Dict, Any, Optional
+from transformers import BitsAndBytesConfig
 
 from vibevoice.modular.modeling_vibevoice_asr import VibeVoiceASRForConditionalGeneration
 from vibevoice.processor.vibevoice_asr_processor import VibeVoiceASRProcessor
@@ -70,10 +71,23 @@ class VibeVoiceASRInferenceWithContext:
         }
 
         if load_in_8bit:
-            # 8-bit quantization: requires device_map="auto" and sets dtype automatically
-            model_kwargs["load_in_8bit"] = True
+            # 8-bit quantization with selective module skipping
+            # Skip audio-related layers (tokenizers, connectors, lm_head) to preserve audio representation quality
+            # Only the Qwen2 LLM backbone (model.language_model.layers.*) gets quantized to INT8
+            quantization_config = BitsAndBytesConfig(
+                load_in_8bit=True,
+                llm_int8_skip_modules=[
+                    "acoustic_tokenizer",
+                    "semantic_tokenizer",
+                    "acoustic_connector",
+                    "semantic_connector",
+                    "lm_head",
+                ]
+            )
+            model_kwargs["quantization_config"] = quantization_config
             model_kwargs["device_map"] = "auto"
             print("Loading model with 8-bit quantization (device_map=auto)")
+            print("  Skipping quantization for: acoustic_tokenizer, semantic_tokenizer, acoustic_connector, semantic_connector, lm_head")
         else:
             # Standard loading
             model_kwargs["dtype"] = dtype

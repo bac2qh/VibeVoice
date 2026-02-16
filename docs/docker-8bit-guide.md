@@ -154,7 +154,28 @@ Alice, Bob, machine learning, OpenAI
 | Mode | VRAM (approx) | Fits on 4080 (16GB) |
 |------|---------------|---------------------|
 | bfloat16 (default) | ~14 GB | No (OOM with any overhead) |
-| 8-bit quantized | ~7 GB | Yes (recommended) |
+| 8-bit quantized | ~8-9 GB | Yes (recommended) |
+
+## Technical Details: Selective 8-bit Quantization
+
+The `--load_in_8bit` flag uses `BitsAndBytesConfig` with selective module skipping to prevent audio representation corruption:
+
+**Quantized to INT8 (using LLM.int8()):**
+- Qwen2 LLM backbone layers (`model.language_model.layers.*`): ~7B parameters
+- Reduces these layers from 14GB to ~7GB VRAM
+
+**Kept in bfloat16 (full precision):**
+- `acoustic_tokenizer`: 52 FFN linears processing raw audio (small dims, high sensitivity)
+- `semantic_tokenizer`: Same architecture, processes semantic audio features
+- `acoustic_connector`: 64→3584 projection bridging audio latents to LLM space
+- `semantic_connector`: 64→3584 projection added element-wise with acoustic features
+- `lm_head`: 3584→152064 vocabulary projection (affects token probabilities directly)
+
+**Why skip these modules?**
+
+Quantization errors in the tokenizers and connectors corrupt the audio representation **before** the LLM sees it. Even small errors at the 64-dimensional audio latent level get amplified through the connector's asymmetric projection (64→3584), causing the LLM to receive garbled input → gibberish output.
+
+The skipped modules total ~800M parameters (kept in bf16), adding ~1.5GB VRAM compared to full quantization, but are essential for maintaining transcription quality. The trade-off is well worth it: you get ~40% memory savings (14GB → 8-9GB) while preserving accuracy.
 
 ## CLI Reference
 
