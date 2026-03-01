@@ -21,9 +21,6 @@ cd VibeVoice
 
 # Install package in editable mode
 pip install -e .
-
-# For streaming TTS specifically
-pip install -e ".[streamingtts]"
 ```
 
 ### Docker Installation (Recommended for ASR)
@@ -54,6 +51,28 @@ python demo/vibevoice_asr_inference_from_file.py \
   --audio_files path/to/audio.mp3
 ```
 
+**Inference with Context/Hotwords (also supports 8-bit quantization):**
+```bash
+# Single file with hotwords
+python demo/vibevoice_asr_inference_with_context.py \
+  --model_path microsoft/VibeVoice-ASR \
+  --audio path/to/audio.mp3 \
+  --context "term1, term2"
+
+# 8-bit quantization (~50% VRAM reduction, requires bitsandbytes)
+python demo/vibevoice_asr_inference_with_context.py \
+  --model_path microsoft/VibeVoice-ASR \
+  --audio path/to/audio.mp3 \
+  --load_in_8bit
+
+# Batch directory + save JSON output
+python demo/vibevoice_asr_inference_with_context.py \
+  --model_path microsoft/VibeVoice-ASR \
+  --audio_dir ./audios \
+  --output results.json
+```
+Note: This script uses `--audio` / `--audio_dir` flags (not `--audio_files` like the basic script above).
+
 **vLLM High-Performance Serving:**
 ```bash
 # Launch server in background
@@ -69,6 +88,29 @@ docker run -d --gpus all --name vibevoice-vllm \
 docker exec -it vibevoice-vllm python3 vllm_plugin/tests/test_api.py /app/audio.wav
 docker exec -it vibevoice-vllm python3 vllm_plugin/tests/test_api.py /app/audio.wav --hotwords "term1,term2"
 ```
+
+### Remote Transcription (Wake-on-LAN)
+
+For automated transcription on a remote GPU machine via Wake-on-LAN:
+
+```bash
+# One-time setup: configure inference machine (run ON the inference machine)
+./scripts/setup-inference-server.sh
+
+# Copy and fill in config (run on the controlling machine)
+cp scripts/transcribe-remote.conf.example scripts/transcribe-remote.conf
+
+# Transcribe a file on NAS
+./scripts/transcribe-remote.sh /NAS_1/audio/recording.mp3
+
+# With context and JSON output
+./scripts/transcribe-remote.sh -c "term1, term2" -o /NAS_1/results/out.json /NAS_1/audio/file.mp3
+
+# Batch directory, shutdown after
+./scripts/transcribe-remote.sh -d /NAS_1/audio/batch --shutdown
+```
+
+The workflow: wakes the inference machine via WoL → waits for SSH → starts Docker container → runs inference → suspends/shuts down the machine.
 
 ### Streaming TTS (Realtime)
 
@@ -123,6 +165,14 @@ python inference_lora.py \
   --context_info "term1, term2"
 ```
 
+## Documentation
+
+Detailed guides are in `docs/`:
+- `docker-bf16-guide.md` / `docker-8bit-guide.md` — Docker-based ASR inference (standard and memory-efficient)
+- `docker-vllm-guide.md` — vLLM serving setup
+- `wake-on-lan-guide.md` — Remote Wake-on-LAN transcription end-to-end
+- `vibevoice-asr.md`, `vibevoice-realtime-0.5b.md` — Model-specific usage guides
+
 ## Architecture
 
 ### Package Structure
@@ -147,7 +197,8 @@ vllm_plugin/                        # vLLM integration for high-perf serving
 ├── model.py                        # vLLM model adapter
 ├── inputs.py                       # Input processing for vLLM
 ├── scripts/                        # Server launch scripts
-└── tests/                          # API test scripts
+├── tests/                          # API test scripts
+└── tools/generate_tokenizer_files.py  # Regenerates tokenizer from Qwen2 base
 
 demo/                               # Demo scripts and examples
 ├── vibevoice_asr_gradio_demo.py    # Web UI for ASR
@@ -190,6 +241,11 @@ finetuning-asr/                     # LoRA fine-tuning for ASR
 - Registered in pyproject.toml: `vibevoice = "vllm_plugin:register_vibevoice"`
 - Provides OpenAI-compatible API (`/v1/chat/completions`) with streaming
 - Uses continuous batching for high-throughput inference
+- Registers `VibeVoiceForCausalLM` under architectures `"VibeVoice"` and `"VibeVoiceForASRTraining"`
+- Tokenizer mapping critical for ASR quality: speech tokens mapped to Qwen2.5 extended tokens (`<|object_ref_start|>` → speech_start_id, `<|box_start|>` → speech_pad_id, `<|object_ref_end|>` → speech_end_id)
+
+**Public Package API:**
+`import vibevoice` only exports streaming TTS classes (`VibeVoiceStreamingForConditionalGenerationInference`, `VibeVoiceStreamingConfig`, `VibeVoiceStreamingProcessor`, `VibeVoiceTokenizerProcessor`). ASR classes are imported directly from `vibevoice.modular.modeling_vibevoice_asr` and `vibevoice.processor.vibevoice_asr_processor`.
 
 ### Data Formats
 

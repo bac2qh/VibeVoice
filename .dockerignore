@@ -1,0 +1,6 @@
+.git/
+docs/
+Figures/
+finetuning-asr/toy_dataset/
+scripts/
+*.md
