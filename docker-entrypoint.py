@@ -14,6 +14,7 @@ Environment variables:
 
 import json
 import os
+import shutil
 import sys
 import time
 import traceback
@@ -28,6 +29,7 @@ from vibevoice.processor.vibevoice_asr_processor import VibeVoiceASRProcessor
 AUDIO_EXTENSIONS = {".wav", ".mp3", ".flac", ".m4a", ".ogg", ".opus", ".webm", ".mp4"}
 INPUT_DIR = Path("/input")
 OUTPUT_DIR = Path("/output")
+RECORDINGS_DIR = Path("/recordings")
 
 
 def collect_audio_files() -> list[Path]:
@@ -170,6 +172,12 @@ def main() -> int:
                 encoding="utf-8",
             )
             print(f"  -> {output_path.name} ({result['generation_time']:.1f}s, {len(result['segments'])} segments)")
+            try:
+                dest = RECORDINGS_DIR / audio_file.name
+                shutil.move(str(audio_file), str(dest))
+                print(f"  -> archived to /recordings/{audio_file.name}")
+            except Exception as move_err:
+                print(f"  Warning: could not archive audio file: {move_err}")
         except Exception as e:
             print(f"  Error: {e}")
             traceback.print_exc()
