@@ -7,6 +7,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && \
 
 WORKDIR /app
 
+ENV UV_BREAK_SYSTEM_PACKAGES=1
+
 # Copy only the package manifest first so that the expensive flash-attn
 # compilation layer is cached independently of source file changes.
 COPY pyproject.toml README.md ./
