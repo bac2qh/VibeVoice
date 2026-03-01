@@ -5,3 +5,8 @@ finetuning-asr/toy_dataset/
 scripts/
 *.md
 !README.md
+__pycache__
+*.pyc
+*.pyo
+.gitignore
+*.egg-info
