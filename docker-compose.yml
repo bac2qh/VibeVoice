@@ -22,3 +22,4 @@ services:
       - MODEL_PATH=${MODEL_PATH:-microsoft/VibeVoice-ASR}
       - QUANTIZATION=${QUANTIZATION:-4bit}
       - ATTN_IMPLEMENTATION=${ATTN_IMPLEMENTATION:-flash_attention_2}
+      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
