@@ -61,12 +61,14 @@ def load_model(
     processor = VibeVoiceASRProcessor.from_pretrained(
         model_path,
         language_model_pretrained_name="Qwen/Qwen2.5-7B",
+        local_files_only=True,
     )
 
     model_kwargs = {
         "attn_implementation": attn_implementation,
         "trust_remote_code": True,
         "device_map": "auto",
+        "local_files_only": True,
     }
 
     if load_in_8bit:
