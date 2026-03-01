@@ -7,7 +7,7 @@ No CLI args needed — all config comes from environment variables.
 
 Environment variables:
   MODEL_PATH           HuggingFace model path (default: microsoft/VibeVoice-ASR)
-  LOAD_IN_8BIT         Enable 8-bit quantization (default: true)
+  QUANTIZATION         Quantization mode: 4bit (default), 8bit, or none
   ATTN_IMPLEMENTATION  Attention backend (default: flash_attention_2)
   HOTWORDS             Comma-separated hotwords (overridden by /input/hotwords.txt)
 """
@@ -51,11 +51,11 @@ def load_hotwords() -> str | None:
 
 def load_model(
     model_path: str,
-    load_in_8bit: bool,
+    quantization: str,
     attn_implementation: str,
 ) -> tuple:
     print(f"Loading model: {model_path}")
-    print(f"8-bit quantization: {load_in_8bit}")
+    print(f"Quantization: {quantization}")
     print(f"Attention implementation: {attn_implementation}")
 
     processor = VibeVoiceASRProcessor.from_pretrained(
@@ -71,24 +71,37 @@ def load_model(
         "local_files_only": True,
     }
 
-    if load_in_8bit:
-        # Only the Qwen2 LLM backbone gets quantized to INT8.
-        # Audio-sensitive modules are skipped: quantization errors at the
-        # 64-dim audio latent level get amplified through the 64→3584
-        # connector projection, causing gibberish output.
+    # Audio-sensitive modules are always skipped from quantization:
+    # quantization errors at the 64-dim audio latent level get amplified
+    # through the 64→3584 connector projection, causing gibberish output.
+    # lm_head stays in bf16 to preserve output logit precision.
+    _skip_modules = [
+        "acoustic_tokenizer",
+        "semantic_tokenizer",
+        "acoustic_connector",
+        "semantic_connector",
+        "lm_head",
+    ]
+
+    if quantization == "4bit":
+        model_kwargs["quantization_config"] = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.bfloat16,
+            bnb_4bit_use_double_quant=True,
+            # Named for 8-bit but reused by bnb for 4-bit skip logic too.
+            llm_int8_skip_modules=_skip_modules,
+        )
+        print("Loading with NF4 4-bit quantization (skipping audio modules)")
+    elif quantization == "8bit":
         model_kwargs["quantization_config"] = BitsAndBytesConfig(
             load_in_8bit=True,
-            llm_int8_skip_modules=[
-                "acoustic_tokenizer",
-                "semantic_tokenizer",
-                "acoustic_connector",
-                "semantic_connector",
-                "lm_head",
-            ],
+            llm_int8_skip_modules=_skip_modules,
         )
         print("Loading with 8-bit quantization (skipping audio modules)")
     else:
         model_kwargs["torch_dtype"] = torch.bfloat16
+        print("Loading in bf16 (no quantization)")
 
     model = VibeVoiceASRForConditionalGeneration.from_pretrained(model_path, **model_kwargs)
     model.eval()
@@ -153,11 +166,15 @@ def main() -> int:
         print(f"Using hotwords: {hotwords[:100]}{'...' if len(hotwords) > 100 else ''}")
 
     model_path = os.environ.get("MODEL_PATH", "microsoft/VibeVoice-ASR")
-    load_in_8bit = os.environ.get("LOAD_IN_8BIT", "true").lower() in ("true", "1", "yes")
+    quantization = os.environ.get("QUANTIZATION", "4bit").lower()
+    if quantization not in ("4bit", "8bit", "none"):
+        sys.exit(f"Invalid QUANTIZATION={quantization!r} (expected: 4bit, 8bit, none)")
+    if os.environ.get("LOAD_IN_8BIT"):
+        print("WARNING: LOAD_IN_8BIT is deprecated, use QUANTIZATION=8bit instead")
     attn_implementation = os.environ.get("ATTN_IMPLEMENTATION", "flash_attention_2")
 
     try:
-        processor, model = load_model(model_path, load_in_8bit, attn_implementation)
+        processor, model = load_model(model_path, quantization, attn_implementation)
     except Exception as e:
         print(f"Error loading model: {e}")
         traceback.print_exc()
